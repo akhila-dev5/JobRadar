@@ -1,0 +1,16 @@
+[
+  {"keyword": "Python", "aliases": ["python3"]},
+  {"keyword": "C#", "aliases": ["c sharp"]},
+  {"keyword": ".NET", "aliases": ["dotnet"]},
+  {"keyword": "ASP.NET Core", "aliases": ["asp.net"]},
+  {"keyword": "React", "aliases": ["react.js", "reactjs"]},
+  {"keyword": "Angular"},
+  {"keyword": "JavaScript", "aliases": ["js"]},
+  {"keyword": "REST APIs", "aliases": ["rest api", "restful"]},
+  {"keyword": "Microservices", "aliases": ["microservice"]},
+  {"keyword": "SQL"},
+  {"keyword": "PostgreSQL", "aliases": ["postgres"]},
+  {"keyword": "Azure"},
+  {"keyword": "Backend Developer"},
+  {"keyword": "Full Stack Developer"}
+]

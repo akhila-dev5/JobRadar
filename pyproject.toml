@@ -1,0 +1,25 @@
+[project]
+name = "jobradar-ai"
+version = "1.0.0"
+description = "Local AI-powered job discovery and resume matching"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["backend/alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = [
+    "B008",  # FastAPI uses Depends()/File() in argument defaults by design
+    "E501",  # line wrapping is handled by `ruff format`
+]
+
+[tool.ruff.lint.per-file-ignores]
+"frontend/*" = ["SIM102", "SIM117"]  # Streamlit layouts read better nested
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]

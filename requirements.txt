@@ -1,0 +1,27 @@
+# Runtime dependencies for JobRadar AI (Python 3.12).
+# Install the CPU-only PyTorch build FIRST (see docs/13-setup-and-installation.md),
+# otherwise pip pulls a multi-GB CUDA build that you do not need.
+
+# Backend
+fastapi>=0.163,<1      # DB commit timing relies on Depends(scope="function"); tested on 0.163
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9      # file uploads
+pydantic>=2.7
+pydantic-settings>=2.3
+httpx>=0.27
+sqlalchemy>=2.0
+alembic>=1.13
+psycopg[binary]>=3.2
+apscheduler>=3.10,<4
+
+# Resume processing
+pymupdf>=1.24
+python-docx>=1.1
+
+# AI / NLP (CPU)
+sentence-transformers>=3.0
+scikit-learn>=1.5
+numpy>=1.26
+
+# Frontend
+streamlit>=1.38

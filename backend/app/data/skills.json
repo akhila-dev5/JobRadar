@@ -1,0 +1,172 @@
+{
+  "languages": {
+    "Python": [
+      "python3"
+    ],
+    "Java": [],
+    "JavaScript": [
+      "js",
+      "ecmascript"
+    ],
+    "TypeScript": [],
+    "C#": [
+      "c sharp",
+      "csharp"
+    ],
+    "C++": [
+      "cpp"
+    ],
+    "C": [],
+    "Go": [
+      "golang"
+    ],
+    "Rust": [],
+    "Kotlin": [],
+    "Swift": [],
+    "Ruby": [],
+    "PHP": [],
+    "Scala": [],
+    "R": [],
+    "Bash": [
+      "shell scripting",
+      "shell script"
+    ],
+    "PowerShell": [],
+    "SQL": [],
+    "HTML": [],
+    "CSS": []
+  },
+  "frameworks": {
+    "FastAPI": [],
+    "Django": [],
+    "Flask": [],
+    "ASP.NET Core": [
+      "asp.net",
+      "aspnet core"
+    ],
+    ".NET": [
+      "dotnet",
+      ".net core"
+    ],
+    "Spring Boot": [
+      "spring framework"
+    ],
+    "Node.js": [
+      "nodejs",
+      "node js"
+    ],
+    "React": [
+      "react.js",
+      "reactjs"
+    ],
+    "Angular": [
+      "angularjs"
+    ],
+    "Vue": [
+      "vue.js",
+      "vuejs"
+    ],
+    "Next.js": [
+      "nextjs"
+    ],
+    "Entity Framework": [
+      "ef core"
+    ],
+    "REST APIs": [
+      "rest api",
+      "restful",
+      "restful apis"
+    ],
+    "GraphQL": [],
+    "gRPC": [],
+    "Microservices": [
+      "microservice"
+    ],
+    "PyTorch": [],
+    "TensorFlow": [],
+    "scikit-learn": [
+      "sklearn"
+    ],
+    "Pandas": [],
+    "NumPy": [],
+    "Express.js": [
+      "expressjs"
+    ]
+  },
+  "databases": {
+    "PostgreSQL": [
+      "postgres"
+    ],
+    "MySQL": [],
+    "SQL Server": [
+      "mssql",
+      "ms sql"
+    ],
+    "Oracle": [],
+    "MongoDB": [
+      "mongo"
+    ],
+    "Redis": [],
+    "SQLite": [],
+    "Elasticsearch": [],
+    "Cassandra": [],
+    "DynamoDB": [],
+    "Cosmos DB": [
+      "cosmosdb"
+    ]
+  },
+  "cloud": {
+    "Azure": [
+      "microsoft azure"
+    ],
+    "AWS": [
+      "amazon web services"
+    ],
+    "GCP": [
+      "google cloud",
+      "google cloud platform"
+    ],
+    "Kubernetes": [
+      "k8s"
+    ],
+    "Docker": [],
+    "Terraform": [],
+    "Ansible": [],
+    "Azure DevOps": [],
+    "Supabase": [],
+    "AWS Lambda": []
+  },
+  "tools": {
+    "Git": [],
+    "GitHub": [],
+    "GitLab": [],
+    "Linux": [],
+    "Jenkins": [],
+    "GitHub Actions": [],
+    "CI/CD": [
+      "ci cd",
+      "continuous integration"
+    ],
+    "Jira": [],
+    "Pytest": [],
+    "RPM": [],
+    "Kafka": [],
+    "RabbitMQ": [],
+    "Prometheus": [],
+    "Grafana": [],
+    "Selenium": [],
+    "Postman": [],
+    "Agile": [],
+    "Scrum": [],
+    "Machine Learning": [],
+    "LLM": [
+      "large language model",
+      "large language models"
+    ],
+    "Data Structures": [
+      "data structures and algorithms",
+      "dsa"
+    ],
+    "System Design": []
+  }
+}

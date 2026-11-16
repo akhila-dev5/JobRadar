@@ -1,0 +1,9 @@
+[
+  {
+    "name": "Replace With Real Company",
+    "platform": "greenhouse",
+    "board_token": "replace-with-board-token",
+    "api_region": "us",
+    "enabled": false
+  }
+]
