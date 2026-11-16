@@ -6,8 +6,7 @@ keeps the ones that match **any** of your keywords, scores them against your res
 a small CPU embedding model, and shows everything in a dashboard where you can save jobs
 and track applications.
 
-It is also a learning project: every part is documented in [`docs/`](docs/) for someone
-moving toward a general SDE role.
+It is also a learning project: every part is documented in [`docs/`](docs/)
 
 ## The problem it solves
 
