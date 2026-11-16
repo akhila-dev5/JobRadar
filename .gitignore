@@ -1,0 +1,36 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Personal data: never commit resumes or exports
+data/resumes/*
+!data/resumes/.gitkeep
+*.pdf
+*.docx
+exports/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Local model cache (sentence-transformers / Hugging Face)
+.cache/
+models_cache/
+.huggingface/
+
+# Local test databases and temp files
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.tmp
+.DS_Store
+.streamlit/secrets.toml

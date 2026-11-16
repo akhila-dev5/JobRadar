@@ -1,0 +1,16 @@
+from backend.app.models.entities import (  # noqa: F401
+    APPLICATION_STATUSES,
+    PLATFORMS,
+    ApplicationTracking,
+    Company,
+    EmbeddingCache,
+    Job,
+    JobMatch,
+    JobPreference,
+    NotificationHistory,
+    Resume,
+    ResumeSkill,
+    SavedJob,
+    SearchHistory,
+    SearchKeyword,
+)
