@@ -28,11 +28,11 @@ flowchart LR
 
 | Page | Contents |
 |---|---|
-| Dashboard | jobs stored, qualified, above threshold, new (7 days), companies monitored, last successful search; search-all and search-selected buttons with live progress; company status table |
+| Dashboard | **Search activity** panel at the top (green "Search #N is running" with progress bar, current company and live counts, refreshed every 2 s via `st.fragment`; becomes a result summary with notes when done; warns if a run looks stuck for over 30 minutes); jobs stored, qualified, above threshold, new (7 days), companies monitored, last successful search; search-all and search-selected buttons; company status table; expandable Search history (last 10 runs) |
 | Job Results | filters (company, title, keyword, location, minimum score, source, date, sort), paged job cards (25 per page) with score, matched keywords/skills, missing skills, published date, source, direct apply link; detail view with highlighted description and explanation; save button |
 | Saved Jobs | bookmarked jobs, including those below the AI threshold |
 | Application Tracker | status (discovered, interested, applied, interviewing, rejected, offer received), notes, applied date |
-| Settings | tabs: Companies (add, edit, enable/disable, test, delete, CSV/JSON import/export), Keywords (with aliases and a Test match tool), Preferences (titles, locations, work mode, experience, salary, AI threshold on/off, email), Resume (upload, activate, edit skills, delete) |
+| Settings | tabs: Companies (**type names, one per line**; each card shows its job-board status badge and careers link, with *Find job board again*, edit / paste a careers link, enable/disable, test, delete, CSV/JSON import/export), Keywords (with aliases and a Test match tool), Preferences (titles, locations, work mode, experience, salary, AI threshold on/off, email), Resume (upload, activate, edit skills, delete) |
 
 ## The AI threshold in the UI
 

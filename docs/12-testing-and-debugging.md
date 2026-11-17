@@ -1,6 +1,6 @@
 # 12 - Testing and Debugging
 
-Run: `pytest` (91 tests, a few seconds) and `ruff check .`
+Run: `pytest` (146 tests, a few seconds) and `ruff check .`
 
 ## Why tests exist here
 
@@ -21,8 +21,8 @@ Supabase, a job board or your mailbox.
 
 | Layer | Files | What they check |
 |---|---|---|
-| Unit (pure logic) | `test_keyword_matcher` (16), `test_scoring` (13), `test_resume_parser` (10), `test_collectors` (15), `test_safety_and_cache` (5) | one function or class at a time, no database |
-| Integration | `test_api_config` (13), `test_search_pipeline` (18), `test_commit_before_response` (1) | real FastAPI app + real SQLAlchemy on SQLite + fake network |
+| Unit (pure logic) | `test_keyword_matcher` (16), `test_scoring` (13), `test_resume_parser` (10), `test_collectors` (15), `test_safety_and_cache` (5), `test_board_discovery` (34: name normalising, slug guesses, careers-link parsing, verified / unverified / mismatch / unreachable) | one function or class at a time, no database |
+| Integration | `test_api_config` (13), `test_search_pipeline` (18), `test_commit_before_response` (1), `test_company_discovery` (21: add by name, bulk add, duplicates, re-discovery, search with discovery, progress fields) | real FastAPI app + real SQLAlchemy on SQLite + fake network |
 
 ## Requirement-to-test map
 

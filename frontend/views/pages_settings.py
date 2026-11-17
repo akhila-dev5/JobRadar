@@ -6,66 +6,111 @@ import streamlit as st
 
 from frontend.views.common import client, fmt_dt, guard
 
-PLATFORMS = ["greenhouse", "lever", "ashby"]
-
 
 def _lines(text: str) -> list[str]:
     return [p.strip() for chunk in text.splitlines() for p in chunk.split(",") if p.strip()]
 
 
-def tab_companies() -> None:
-    api = client()
-    st.caption(
-        "Companies must use a supported public job-board platform. The board token is the part of the careers URL "
-        "after the platform host, e.g. boards.greenhouse.io/**acme**, jobs.lever.co/**acme**, jobs.ashbyhq.com/**acme**."
-    )
-    with st.form("add-company", clear_on_submit=True):
-        c = st.columns([2, 1, 2, 1])
-        name = c[0].text_input("Company name")
-        platform = c[1].selectbox("Platform", PLATFORMS)
-        token = c[2].text_input("Board token")
-        region = c[3].selectbox("Lever region", ["us", "eu"])
-        if st.form_submit_button("Add company", type="primary"):
-            if guard(
-                api.post,
-                "/companies",
-                json={"name": name, "platform": platform, "board_token": token, "api_region": region},
-            ):
-                st.rerun()
+STATUS_BADGE = {
+    "pending": "🔎 Looking for the career page…",
+    "verified": "✅ Job board found",
+    "unverified": "🟡 Job board found: please confirm it is the right company",
+    "not_found": "❌ No public job board found",
+    "unreachable": "📡 Could not reach the job-board servers (will retry at the next search)",
+    "manual": "✏️ Job board set by you",
+}
 
-    companies = guard(api.get, "/companies") or []
+
+def _company_cards(companies: list[dict]) -> None:
+    api = client()
     for co in companies:
         with st.container(border=True):
             c = st.columns([3, 1, 1, 1, 1])
-            c[0].markdown(f"**{co['name']}**  \n`{co['platform']}` / `{co['board_token']}`")
+            board = f"`{co['platform']}` / `{co['board_token']}`" if co["platform"] else "no job board yet"
+            c[0].markdown(f"**{co['name']}**  \n{board}")
+            c[0].caption(STATUS_BADGE.get(co["discovery_status"], co["discovery_status"]))
+            if co["careers_url"]:
+                c[0].markdown(f"[Open careers page ↗]({co['careers_url']})")
             c[1].caption(f"{co['jobs_collected']} jobs")
             c[1].caption(f"ok: {fmt_dt(co['last_success_at'])}")
             enabled = c[2].toggle("Enabled", value=co["enabled"], key=f"en-{co['id']}")
             if enabled != co["enabled"]:
                 guard(api.patch, f"/companies/{co['id']}", json={"enabled": enabled})
                 st.rerun()
-            if c[3].button("Test", key=f"te-{co['id']}"):
+            if c[3].button("Test", key=f"te-{co['id']}", disabled=not co["platform"]):
                 res = guard(api.post, f"/companies/{co['id']}/test")
                 if res:
                     (st.success if res["ok"] else st.error)(res["message"])
             if c[4].button("Delete", key=f"de-{co['id']}"):
                 guard(api.delete, f"/companies/{co['id']}")
                 st.rerun()
+            if co["discovery_status"] in ("not_found", "unreachable", "unverified", "verified") and st.button(
+                "🔎 Find job board again", key=f"rd-{co['id']}"
+            ):
+                guard(api.post, f"/companies/{co['id']}/discover")
+                st.rerun()
             if co["last_error"]:
                 st.caption(f"⚠️ {co['last_error']}")
-            with st.expander("Edit"):
+            with st.expander("Edit / paste a careers link"):
                 with st.form(f"edit-{co['id']}"):
-                    e = st.columns(3)
-                    n = e[0].text_input("Name", co["name"])
-                    p = e[1].selectbox("Platform", PLATFORMS, index=PLATFORMS.index(co["platform"]))
-                    t = e[2].text_input("Board token", co["board_token"])
+                    n = st.text_input("Name", co["name"])
+                    link = st.text_input(
+                        "Careers link (Greenhouse, Lever or Ashby)",
+                        placeholder="https://jobs.lever.co/yourcompany",
+                        help="Paste the company's job-board link and it is used instead of automatic discovery.",
+                    )
                     if st.form_submit_button("Save"):
-                        if guard(
-                            api.patch,
-                            f"/companies/{co['id']}",
-                            json={"name": n, "platform": p, "board_token": t},
-                        ):
+                        payload = {"name": n}
+                        if link.strip():
+                            payload["careers_url"] = link.strip()
+                        if guard(api.patch, f"/companies/{co['id']}", json=payload):
                             st.rerun()
+
+
+def tab_companies() -> None:
+    api = client()
+    st.caption(
+        "Just enter company names. JobRadar looks for each company's public job board on Greenhouse, Lever and "
+        "Ashby and then searches it for your keywords. Companies that run their own careers site (Workday, "
+        "custom pages) cannot be found automatically; for those, paste a Greenhouse/Lever/Ashby link if they have one."
+    )
+    flash = st.session_state.pop("company_flash", None)
+    if flash:
+        st.success(flash)
+
+    with st.form("add-companies", clear_on_submit=True):
+        names = st.text_area(
+            "Company names (one per line, or separated by commas)",
+            placeholder="Stripe\nCloudflare\nGitLab",
+            height=110,
+        )
+        if st.form_submit_button("Add and find job boards", type="primary"):
+            wanted = _lines(names)
+            if not wanted:
+                st.error("Enter at least one company name.")
+            else:
+                res = guard(api.post, "/companies/bulk", json={"names": wanted})
+                if res:
+                    msg = f"Added {len(res['created'])} compan{'y' if len(res['created']) == 1 else 'ies'}; looking for their job boards."
+                    if res["skipped"]:
+                        msg += f" Already in your list: {', '.join(res['skipped'])}."
+                    st.session_state["company_flash"] = msg
+                    st.rerun()
+
+    companies = guard(api.get, "/companies") or []
+    if any(co["discovery_status"] == "pending" for co in companies):
+        st.info("Looking for job boards… this page refreshes by itself.")
+
+        @st.fragment(run_every=3)
+        def live() -> None:
+            fresh = guard(api.get, "/companies") or []
+            if not any(co["discovery_status"] == "pending" for co in fresh):
+                st.rerun()  # leave auto-refresh mode
+            _company_cards(fresh)
+
+        live()
+    else:
+        _company_cards(companies)
 
     st.subheader("Import / export")
     c = st.columns(3)

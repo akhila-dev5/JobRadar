@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Response, UploadFile
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
@@ -11,10 +11,13 @@ from backend.app.collectors import CollectorError, CompanyTarget, get_collector
 from backend.app.matching.keyword_matcher import KeywordMatcher, KeywordRule
 from backend.app.repositories.config_repos import (
     CompanyRepository,
+    Conflict,
     KeywordRepository,
     PreferenceRepository,
 )
 from backend.app.schemas.api import (
+    BulkResult,
+    CompanyBulkIn,
     CompanyIn,
     CompanyOut,
     CompanyTestResult,
@@ -29,6 +32,7 @@ from backend.app.schemas.api import (
     PreferencesOut,
 )
 from backend.app.services.company_io import export_companies, import_companies
+from backend.app.services.discovery_runner import run_discovery
 
 companies = APIRouter(prefix="/companies", tags=["companies"])
 keywords = APIRouter(prefix="/keywords", tags=["keywords"])
@@ -42,8 +46,39 @@ def list_companies(db: Session = DbSession):
 
 
 @companies.post("", response_model=CompanyOut, status_code=201)
-def create_company(body: CompanyIn, db: Session = DbSession):
-    return CompanyRepository(db).create(**body.model_dump())
+def create_company(
+    body: CompanyIn,
+    background: BackgroundTasks,
+    db: Session = DbSession,
+    factory=Depends(get_deps_factory),
+):
+    """Add one company. With just a name, its job board is discovered in the background."""
+    data = body.model_dump()
+    data.pop("careers_url", None)
+    company = CompanyRepository(db).create(**data)
+    if company.discovery_status == "pending":
+        background.add_task(run_discovery, [company.id], factory)
+    return company
+
+
+@companies.post("/bulk", response_model=BulkResult, status_code=201)
+def create_companies_bulk(
+    body: CompanyBulkIn,
+    background: BackgroundTasks,
+    db: Session = DbSession,
+    factory=Depends(get_deps_factory),
+):
+    """Add many companies from a list of names; boards are discovered in the background."""
+    repo = CompanyRepository(db)
+    created, skipped = [], []
+    for name in body.names:
+        try:
+            created.append(repo.create(name=name))
+        except Conflict:
+            skipped.append(name)
+    if created:
+        background.add_task(run_discovery, [c.id for c in created], factory)
+    return BulkResult(created=created, skipped=skipped)
 
 
 @companies.get("/export")
@@ -55,9 +90,11 @@ def export(format: str = Query("json", pattern="^(json|csv)$"), db: Session = Db
 
 @companies.post("/import", response_model=ImportSummary)
 async def import_file(
+    background: BackgroundTasks,
     format: str = Query("json", pattern="^(json|csv)$"),
     file: UploadFile = File(...),
     db: Session = DbSession,
+    factory=Depends(get_deps_factory),
 ):
     raw = await file.read(1_000_001)
     if len(raw) > 1_000_000:
@@ -66,12 +103,33 @@ async def import_file(
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         return ImportSummary(created=0, updated=0, errors=["File must be UTF-8 text."])
-    return import_companies(db, text, format)
+    summary = import_companies(db, text, format)
+    if summary["new_pending"]:
+        background.add_task(run_discovery, summary["new_pending"], factory)
+    return ImportSummary(**{k: v for k, v in summary.items() if k != "new_pending"})
 
 
 @companies.patch("/{company_id}", response_model=CompanyOut)
 def update_company(company_id: int, body: CompanyUpdate, db: Session = DbSession):
-    return CompanyRepository(db).update(company_id, **body.model_dump(exclude_unset=True))
+    data = body.model_dump(exclude_unset=True)
+    data.pop("careers_url", None)  # already translated into platform/board_token/api_region
+    return CompanyRepository(db).update(company_id, **data)
+
+
+@companies.post("/{company_id}/discover", response_model=CompanyOut)
+def rediscover_company(
+    company_id: int,
+    background: BackgroundTasks,
+    db: Session = DbSession,
+    factory=Depends(get_deps_factory),
+):
+    """Forget the current board and look for the company's job board again."""
+    company = CompanyRepository(db).get(company_id)
+    company.platform = company.board_token = None
+    company.discovery_status = "pending"
+    company.last_error = None
+    background.add_task(run_discovery, [company.id], factory)
+    return company
 
 
 @companies.delete("/{company_id}", status_code=204)
@@ -84,6 +142,8 @@ def delete_company(company_id: int, db: Session = DbSession):
 def test_company(company_id: int, db: Session = DbSession, factory=Depends(get_deps_factory)):
     """Fetch the board once to verify platform + board token. Stores nothing."""
     company = CompanyRepository(db).get(company_id)
+    if not company.platform or not company.board_token:
+        return CompanyTestResult(ok=False, message="No job board known yet for this company.")
     http = factory().http
     try:
         collector = get_collector(company.platform, http)

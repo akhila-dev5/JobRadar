@@ -27,7 +27,7 @@ Standalone tables: `search_keywords`, `job_preferences` (one row, id = 1), `sear
 
 | Table | Purpose |
 |---|---|
-| companies | target companies: platform, board token, enabled, last search/success/error, jobs collected |
+| companies | target companies: name, platform and board token (empty until discovered), discovery status (pending / verified / unverified / not_found / unreachable / manual), enabled, last search/success/error, jobs collected |
 | search_keywords | keyword, aliases (JSON list), enabled |
 | job_preferences | titles, locations, work modes, experience, salary, AI threshold + on/off, weights, email settings |
 | resumes / resume_skills | extracted profile per resume version; skills with category and auto/manual source |
@@ -35,7 +35,7 @@ Standalone tables: `search_keywords`, `job_preferences` (one row, id = 1), `sear
 | job_matches | score, breakdown, matched keywords/skills, missing skills, excerpts, explanation |
 | saved_jobs | bookmarks |
 | application_tracking | status, notes, applied date |
-| search_history | each run: status, counts, errors |
+| search_history | each run: status, counts, errors, live progress (`companies_done`, `current_company`) |
 | notification_history | which job was emailed (prevents repeats) |
 | embedding_cache | vectors keyed by text hash + model |
 
@@ -74,6 +74,9 @@ The keyword filter is applied in Python over a JSON list so the same code runs o
 and on the SQLite used in tests; at single-user scale this is fine.
 
 ## Migrations (Alembic)
+
+- `0001` initial schema (with Row Level Security).
+- `0002` companies can be added by name only (`platform` and `board_token` become nullable, `discovery_status` is added; existing rows become `manual`) and `search_history` gets live-progress columns. It uses `batch_alter_table`, so it works on PostgreSQL and SQLite.
 
 Think of migrations as Git for your schema. `alembic upgrade head` applies pending ones;
 `alembic revision --autogenerate -m "add x"` drafts a new one after you change a model (always

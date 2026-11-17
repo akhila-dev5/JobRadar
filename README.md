@@ -16,7 +16,8 @@ what you have already seen (so you only look at new jobs).
 
 ## Features
 
-- **Target companies** (add / edit / enable / disable / delete, CSV and JSON import and export, "test connection")
+- **Add companies by name only**: the app finds each company's job board (Greenhouse, Lever or Ashby), checks it is the right company, and links straight to the real postings. Also: edit / enable / disable / delete, CSV and JSON import and export, paste a careers link if you have one
+- **Live search activity** panel: see whether a search is running, which company it is on, and how many jobs it has found
 - **Keyword management** with aliases. **OR logic**: one matching keyword qualifies a job
 - Resume upload (PDF/DOCX), skill extraction, manual correction, multiple versions
 - Collectors for **Greenhouse, Lever and Ashby** public job-board APIs
@@ -83,8 +84,8 @@ streamlit run frontend/dashboard.py               # terminal 2
 
 1. **Settings > Resume**: upload a PDF/DOCX, fix the detected skills.
 2. **Settings > Keywords**: add keywords (a job qualifies if *any* enabled keyword appears in its title or description).
-3. **Settings > Companies**: add a company, choose the platform, enter its board token (the slug in its careers URL, e.g. `jobs.lever.co/<token>`), press **Test**.
-4. **Dashboard**: press **Search all enabled companies**. Results appear under **Job Results**.
+3. **Settings > Companies**: type company names, one per line, and press **Add and find job boards**. Each company shows ✅ job board found, 🟡 found but please confirm the careers link, or ❌ no public job board found.
+4. **Dashboard**: press **Search all enabled companies**. The **Search activity** panel at the top shows it running (companies done, current company, jobs found). Results appear under **Job Results**, each with a direct link to the original posting.
 
 ## How AI matching works (short version)
 
@@ -105,6 +106,7 @@ ruff check .
 ## Limitations
 
 - Only companies on Greenhouse / Lever / Ashby; no LinkedIn, Naukri or Foundit (see above)
+- Job-board discovery works by guessing the board name from the company name. Companies with their own careers site (Workday, iCIMS, a custom page) show "no public job board found" and cannot be searched automatically
 - Resume parsing is heuristic (regex + a skill dictionary). Scanned image PDFs are not supported
 - Experience requirements are parsed from text like "3+ years"; unusual phrasing is missed
 - Single-user app with no login. Keep the API on `127.0.0.1`

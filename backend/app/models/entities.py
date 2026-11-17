@@ -42,9 +42,13 @@ class Company(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200), unique=True)
-    platform: Mapped[str] = mapped_column(String(30))
-    board_token: Mapped[str] = mapped_column(String(200))
+    # NULL until a career board is found (see services/board_discovery.py)
+    platform: Mapped[str | None] = mapped_column(String(30))
+    board_token: Mapped[str | None] = mapped_column(String(200))
     api_region: Mapped[str] = mapped_column(String(10), default="us")  # lever: us | eu
+    # manual (you set platform/token) | verified (name confirmed) | unverified (found, please
+    # confirm the careers link) | not_found
+    discovery_status: Mapped[str] = mapped_column(String(20), default="manual", server_default="manual")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_search_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -54,6 +58,13 @@ class Company(TimestampMixin, Base):
     jobs: Mapped[list["Job"]] = relationship(back_populates="company")
 
     __table_args__ = (UniqueConstraint("platform", "board_token", name="uq_company_board"),)
+
+    @property
+    def careers_url(self) -> str | None:
+        """The company's public careers page on its job-board platform."""
+        from backend.app.services.board_discovery import careers_url
+
+        return careers_url(self.platform, self.board_token, self.api_region)
 
 
 class SearchKeyword(TimestampMixin, Base):
@@ -210,7 +221,9 @@ class SearchHistory(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(20), default="running")  # running|success|partial|failed
     trigger: Mapped[str] = mapped_column(String(20), default="manual")
-    companies_searched: Mapped[int] = mapped_column(Integer, default=0)
+    companies_searched: Mapped[int] = mapped_column(Integer, default=0)  # total to search
+    companies_done: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    current_company: Mapped[str | None] = mapped_column(String(200))  # live progress
     jobs_fetched: Mapped[int] = mapped_column(Integer, default=0)
     new_jobs: Mapped[int] = mapped_column(Integer, default=0)
     qualified_jobs: Mapped[int] = mapped_column(Integer, default=0)

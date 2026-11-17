@@ -24,4 +24,4 @@ scikit-learn>=1.5
 numpy>=1.26
 
 # Frontend
-streamlit>=1.38
+streamlit>=1.67,<2      # width="stretch" replaces the deprecated use_container_width; tested on 1.67

@@ -1,5 +1,6 @@
 """The job search pipeline.
 
+    find the career board of every company still "pending" (added by name only)
     for each enabled company:
         fetch jobs  ->  keyword qualification (OR)  ->  store qualifying jobs
         ->  AI scoring  ->  expire vanished jobs
@@ -30,6 +31,8 @@ from backend.app.repositories.config_repos import (
     PreferenceRepository,
 )
 from backend.app.repositories.job_repos import HistoryRepository, JobRepository, ResumeRepository
+from backend.app.services.board_discovery import BoardDiscovery
+from backend.app.services.discovery_runner import discover_company
 from backend.app.services.matching_service import MatchingService
 from backend.app.services.notification_service import EmailNotifier, NotificationError
 
@@ -76,8 +79,18 @@ class SearchService:
             errors.append(f"Unexpected error: {exc}")
             history.status = "failed"
         history.errors = errors
+        history.current_company = None
         history.finished_at = utcnow()
         self.db.commit()
+        logger.info(
+            "Search %s finished: %s (%d fetched, %d matched, %d new, %d notes)",
+            history.id,
+            history.status,
+            history.jobs_fetched,
+            history.qualified_jobs,
+            history.new_jobs,
+            len(errors),
+        )
         return history
 
     def _run(self, history: SearchHistory, company_ids: list[int] | None, errors: list[str]) -> None:
@@ -96,11 +109,36 @@ class SearchService:
         prefs = self.prefs.get()
         resume = self.resumes.active()
         history.companies_searched = len(companies)
+        history.companies_done = 0
+        self.db.commit()  # lets the dashboard show "running" with the total right away
+        logger.info("Search %s started: %d companies", history.id, len(companies))
 
+        discovery = BoardDiscovery(self.deps.http)
         fetched_total = qualified_total = ok_companies = 0
         new_jobs: list[Job] = []
 
         for company in companies:
+            history.current_company = company.name
+            self.db.commit()
+            if company.discovery_status in ("pending", "unreachable"):
+                logger.info("Search %s: looking for the career board of %r", history.id, company.name)
+                discover_company(self.db, company, discovery)
+                self.db.commit()
+            if not company.platform or not company.board_token:
+                msg = f"{company.name}: {company.last_error or 'no career board found'}"
+                errors.append(msg)
+                self.companies.record_search(company, ok=False, count=0, error=company.last_error)
+                history.companies_done += 1
+                self.db.commit()
+                continue
+
+            logger.info(
+                "Search %s: fetching %s (%s/%s)",
+                history.id,
+                company.name,
+                company.platform,
+                company.board_token,
+            )
             target = CompanyTarget(company.name, company.board_token, company.api_region)
             try:
                 collector = get_collector(company.platform, self.deps.http)
@@ -110,6 +148,7 @@ class SearchService:
                 logger.warning(msg)
                 errors.append(msg)
                 self.companies.record_search(company, ok=False, count=0, error=str(exc))
+                history.companies_done += 1
                 self.db.commit()
                 continue
 
@@ -138,8 +177,19 @@ class SearchService:
             self.companies.record_search(company, ok=True, count=len(fetched), error=None)
             fetched_total += len(fetched)
             qualified_total += len(to_score)
+            history.companies_done += 1
+            history.jobs_fetched = fetched_total  # live counters for the dashboard
+            history.qualified_jobs = qualified_total
+            logger.info(
+                "Search %s: %s done, %d jobs fetched, %d matched keywords",
+                history.id,
+                company.name,
+                len(fetched),
+                len(to_score),
+            )
             self.db.commit()  # progress survives a crash in a later company
 
+        history.current_company = None
         history.jobs_fetched = fetched_total
         history.qualified_jobs = qualified_total
         history.new_jobs = len(new_jobs)

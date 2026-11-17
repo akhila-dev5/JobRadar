@@ -25,41 +25,103 @@ def _clean_list(values: list[str]) -> list[str]:
 
 
 # ------------------------------------------------------------- companies
+DiscoveryStatus = Literal["pending", "verified", "unverified", "not_found", "unreachable", "manual"]
+TOKEN_PATTERN = r"^[A-Za-z0-9_.\-]+$"
+
+
+def _clean_name(v: str) -> str:
+    v = " ".join(v.split())
+    if not v:
+        raise ValueError("name must not be blank")
+    return v
+
+
 class CompanyIn(BaseModel):
+    """Only the name is required. Leave platform/board_token/careers_url empty and the app
+    finds the company's public job board by itself."""
+
     name: str = Field(min_length=1, max_length=200)
-    platform: Platform
-    board_token: str = Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_.\-]+$")
+    platform: Platform | None = None
+    board_token: str | None = Field(default=None, min_length=1, max_length=200, pattern=TOKEN_PATTERN)
     api_region: Literal["us", "eu"] = "us"
+    careers_url: str | None = Field(default=None, max_length=500)  # paste a Greenhouse/Lever/Ashby link
     enabled: bool = True
 
     @field_validator("name")
     @classmethod
     def _strip(cls, v: str) -> str:
-        v = " ".join(v.split())
-        if not v:
-            raise ValueError("name must not be blank")
-        return v
+        return _clean_name(v)
+
+    @model_validator(mode="after")
+    def _resolve_board(self) -> CompanyIn:
+        from backend.app.services.board_discovery import parse_careers_url
+
+        if self.careers_url and self.careers_url.strip():
+            ref = parse_careers_url(self.careers_url)
+            if ref is None:
+                raise ValueError(
+                    "careers_url is not a recognised Greenhouse, Lever or Ashby link "
+                    "(e.g. https://boards.greenhouse.io/acme, https://jobs.lever.co/acme, "
+                    "https://jobs.ashbyhq.com/acme)"
+                )
+            self.platform, self.board_token, self.api_region = ref.platform, ref.board_token, ref.api_region
+        if (self.platform is None) != (self.board_token is None):
+            raise ValueError("platform and board_token must be given together, or both left empty")
+        return self
 
 
 class CompanyUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     platform: Platform | None = None
-    board_token: str | None = Field(default=None, min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_.\-]+$")
+    board_token: str | None = Field(default=None, min_length=1, max_length=200, pattern=TOKEN_PATTERN)
     api_region: Literal["us", "eu"] | None = None
+    careers_url: str | None = Field(default=None, max_length=500)
     enabled: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _strip(cls, v: str | None) -> str | None:
+        return _clean_name(v) if v is not None else v
+
+    @model_validator(mode="after")
+    def _resolve_board(self) -> CompanyUpdate:
+        from backend.app.services.board_discovery import parse_careers_url
+
+        if self.careers_url and self.careers_url.strip():
+            ref = parse_careers_url(self.careers_url)
+            if ref is None:
+                raise ValueError("careers_url is not a recognised Greenhouse, Lever or Ashby link")
+            self.platform, self.board_token, self.api_region = ref.platform, ref.board_token, ref.api_region
+        return self
+
+
+class CompanyBulkIn(BaseModel):
+    names: list[str] = Field(min_length=1, max_length=200)
+
+    @field_validator("names")
+    @classmethod
+    def _names(cls, v: list[str]) -> list[str]:
+        return _clean_list([_clean_name(n) for n in v if n and n.strip()])
 
 
 class CompanyOut(ORMModel):
     id: int
     name: str
-    platform: str
-    board_token: str
+    platform: str | None
+    board_token: str | None
     api_region: str
+    discovery_status: DiscoveryStatus
+    careers_url: str | None  # public careers page of the board, for one-click confirmation
     enabled: bool
     last_search_at: datetime | None
     last_success_at: datetime | None
     last_error: str | None
     jobs_collected: int
+
+
+class BulkResult(BaseModel):
+    created: list[CompanyOut]
+    skipped: list[str]  # names that already existed
 
 
 class ImportSummary(BaseModel):
@@ -308,7 +370,9 @@ class SearchOut(ORMModel):
     finished_at: datetime | None
     status: str
     trigger: str
-    companies_searched: int
+    companies_searched: int  # total companies in this run
+    companies_done: int
+    current_company: str | None
     jobs_fetched: int
     new_jobs: int
     qualified_jobs: int

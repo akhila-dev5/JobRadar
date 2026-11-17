@@ -60,7 +60,8 @@ def render_job_card(job: dict, key_prefix: str, show_actions: bool = True) -> No
         left, right = st.columns([5, 1])
         with left:
             st.markdown(
-                f"**{job['title']}**  \n{job['company_name']} · {job.get('location') or 'Location n/a'}"
+                f"**[{job['title']}]({job['application_url']})**  \n"
+                f"{job['company_name']} · {job.get('location') or 'Location n/a'}"
             )
             st.caption(
                 f"{job['source'].title()} · published {fmt_date(job.get('published_at') or job['first_seen_at'])}"

@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.app.core.names import name_key
 from backend.app.database.base import utcnow
 from backend.app.models import Company, JobPreference, SearchKeyword
 
@@ -31,7 +32,15 @@ class CompanyRepository:
         return obj
 
     def find_by_name(self, name: str) -> Company | None:
-        return self.db.scalar(select(Company).where(func.lower(Company.name) == name.lower()))
+        """Exact (case-insensitive) match first, then the same company spelled differently
+        ("Stripe" vs "Stripe, Inc."). Companies are few, so comparing keys in Python is fine."""
+        exact = self.db.scalar(select(Company).where(func.lower(Company.name) == name.lower()))
+        if exact is not None:
+            return exact
+        key = name_key(name)
+        if not key:
+            return None
+        return next((c for c in self.list() if name_key(c.name) == key), None)
 
     def enabled(self, ids: list[int] | None = None) -> list[Company]:
         q = select(Company).where(Company.enabled.is_(True))
@@ -39,16 +48,34 @@ class CompanyRepository:
             q = q.where(Company.id.in_(ids))
         return list(self.db.scalars(q.order_by(Company.name)))
 
-    def _check_unique(self, name: str, platform: str, token: str, exclude_id: int | None) -> None:
-        for existing in (
-            self.find_by_name(name),
-            self.db.scalar(select(Company).where(Company.platform == platform, Company.board_token == token)),
-        ):
+    def pending(self, ids: list[int] | None = None) -> list[Company]:
+        """Companies still waiting for their career board to be discovered."""
+        q = select(Company).where(Company.discovery_status == "pending")
+        if ids:
+            q = q.where(Company.id.in_(ids))
+        return list(self.db.scalars(q.order_by(Company.id)))
+
+    def _check_unique(
+        self, name: str, platform: str | None, token: str | None, exclude_id: int | None
+    ) -> None:
+        candidates = [self.find_by_name(name)]
+        if platform and token:  # companies without a board yet cannot collide on it
+            candidates.append(
+                self.db.scalar(
+                    select(Company).where(Company.platform == platform, Company.board_token == token)
+                )
+            )
+        for existing in candidates:
             if existing is not None and existing.id != exclude_id:
                 raise Conflict(f"A company with this name or board already exists ({existing.name}).")
 
     def create(self, **data) -> Company:
+        """Name-only companies start 'pending' (discovery fills in the board); a given
+        platform + token means the user chose the board, so it is 'manual'."""
+        data.setdefault("platform", None)
+        data.setdefault("board_token", None)
         self._check_unique(data["name"], data["platform"], data["board_token"], None)
+        data["discovery_status"] = "manual" if data["platform"] else "pending"
         obj = Company(**data)
         self.db.add(obj)
         self.db.flush()
@@ -60,8 +87,14 @@ class CompanyRepository:
         platform = data.get("platform", obj.platform)
         token = data.get("board_token", obj.board_token)
         self._check_unique(name, platform, token, obj.id)
+        board_changed = ("platform" in data and data["platform"] != obj.platform) or (
+            "board_token" in data and data["board_token"] != obj.board_token
+        )
         for key, value in data.items():
             setattr(obj, key, value)
+        if board_changed and obj.platform and obj.board_token:
+            obj.discovery_status = "manual"  # the user picked this board explicitly
+            obj.last_error = None
         self.db.flush()
         return obj
 
