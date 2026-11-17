@@ -9,7 +9,9 @@ Ordered roughly by value for a job seeker. None are needed for the current accep
 2. **Official feeds or partner APIs** for large job portals, if an official programme exists
    for your use. Scraping LinkedIn, Naukri, Foundit or Indeed is intentionally excluded.
 3. **Cross-platform duplicate merging** (same company + title + location posted twice).
-4. **Auto-detect the platform** from a pasted careers URL so you only paste a link.
+4. ~~Auto-detect the platform~~ Done: add by name (board discovery) or paste a careers link.
+   Next step: detect more boards for names that currently end as "no public job board found" (for example from a
+   company website's own careers link, using an official or permitted data source rather than scraping search engines).
 
 ## Matching quality
 

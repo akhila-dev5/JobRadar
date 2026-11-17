@@ -27,6 +27,39 @@ terms and risks account bans. The project deliberately avoids them. If you want 
 future, look for official partner programmes or feeds, or add other public ATS platforms
 (for example Workable, SmartRecruiters or Recruitee) as new collectors.
 
+## Automatic board discovery (add a company by name only)
+
+You type "Stripe"; the app has to find where Stripe's jobs live. Code:
+`services/board_discovery.py`, `services/discovery_runner.py`, `core/names.py`.
+
+1. **Guess board names.** From the company name it builds up to 6 likely slugs, best first:
+   "Acme Technologies, Inc." gives `acme`, `acmetechnologies`, `acme-technologies`, ...
+   (legal suffixes such as Inc/Ltd/Pvt and generic words such as Technologies are dropped for the first guesses).
+2. **Probe the three platforms** for each slug using their public endpoints, one polite request each,
+   no retries: Greenhouse `/boards/{slug}`, Lever `/postings/{slug}` (US and EU), Ashby `/job-board/{slug}`.
+3. **Check it is the right company.**
+
+| Result | Meaning | What the app does |
+|---|---|---|
+| verified | Greenhouse reports the board's company name and it matches yours | uses it |
+| unverified | board exists on Lever/Ashby (they do not expose a company name) | uses it, but shows ⚠️ and the careers link so you can confirm |
+| not_found | nothing public under any guessed name, or Greenhouse boards belong to other companies | marked ❌ and skipped; paste a careers link if the company has one |
+| unreachable | no clear answer from any job-board server (offline, blocked, rate limited) | says nothing about the company; retried at the next search |
+
+Discovery runs in the background right after you add names, and again at the start of every search
+for any company still `pending` or `unreachable`. A wrong guess therefore costs a few cheap requests,
+not a crash. "Stripe", "stripe" and "Stripe, Inc." are treated as the same company.
+
+If you already have the link, paste it (Settings > Companies > Edit): `parse_careers_url` reads
+Greenhouse, Lever (US/EU) and Ashby links and skips guessing entirely.
+
+**Direct links.** Every job stores `application_url` exactly as the job board returns it, so the dashboard
+opens the original posting. Each company also stores a `careers_url` (the board's public page).
+
+**What cannot be found automatically:** companies whose careers site is not on Greenhouse, Lever or Ashby
+(Workday, SAP SuccessFactors, iCIMS, Taleo, custom pages; common for large enterprises). They need a
+dedicated collector or an official feed; see doc 15. Search engines are not scraped to find them.
+
 ## The common shape
 
 Every collector returns `NormalizedJob` (`collectors/base.py`): source, external_id,

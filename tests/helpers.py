@@ -63,9 +63,13 @@ class FakeBoards:
 
     def __init__(self) -> None:
         self.greenhouse: dict[str, list[dict] | int] = {}
+        # company name that Greenhouse reports for a board token (GET /v1/boards/{token})
+        self.greenhouse_names: dict[str, str] = {}
         self.lever: dict[str, list[dict] | int] = {}
         self.ashby: dict[str, list[dict] | int] = {}
         self.calls: list[str] = []
+        self.offline = False  # every request fails like a dropped connection
+        self.force_status: int | None = None  # every request answers with this status (e.g. 403)
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self._handle)
@@ -73,8 +77,17 @@ class FakeBoards:
     def _handle(self, request: httpx.Request) -> httpx.Response:
         url = request.url
         self.calls.append(str(url))
+        if self.offline:
+            raise httpx.ConnectError("offline", request=request)
+        if self.force_status is not None:
+            return httpx.Response(self.force_status)
         parts = url.path.strip("/").split("/")
         if url.host == "boards-api.greenhouse.io":
+            if parts[-1] != "jobs":  # board info: GET /v1/boards/{token}
+                name = self.greenhouse_names.get(parts[-1])
+                if name is None:
+                    return httpx.Response(404, json={"error": "not found"})
+                return httpx.Response(200, json={"name": name, "content": ""})
             return self._respond(
                 self.greenhouse, parts[-2], lambda jobs: {"jobs": jobs, "meta": {"total": len(jobs)}}
             )

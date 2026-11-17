@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import time
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import streamlit as st
 
@@ -12,45 +11,94 @@ from frontend.views.common import STATUS_LABELS, client, fmt_dt, guard, render_j
 SOURCES = ["", "greenhouse", "lever", "ashby"]
 
 
-def _run_search_panel(company_ids: list[int] | None = None) -> None:
+STALE_AFTER_MINUTES = 30
+
+
+def _start_search(company_ids: list[int] | None = None) -> None:
+    """Start a search in the background. The activity panel then shows live progress."""
+    if guard(client().post, "/search", json={"company_ids": company_ids}):
+        st.rerun()
+
+
+def _elapsed(started_at: str) -> str:
+    try:
+        started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=UTC)
+        seconds = int((datetime.now(UTC) - started).total_seconds())
+    except ValueError:
+        return ""
+    return f"{seconds // 60} min {seconds % 60} s" if seconds >= 60 else f"{max(seconds, 0)} s"
+
+
+def _is_stale(run: dict) -> bool:
+    try:
+        started = datetime.fromisoformat(run["started_at"].replace("Z", "+00:00"))
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=UTC)
+    except ValueError:
+        return False
+    return datetime.now(UTC) - started > timedelta(minutes=STALE_AFTER_MINUTES)
+
+
+def _render_run(run: dict | None) -> bool:
+    """Draw the latest search. Returns True while it is still running."""
+    if run is None:
+        st.info("No search has been run yet. Press **Search all enabled companies** below.")
+        return False
+    if run["finished_at"] is None:
+        if _is_stale(run):
+            st.warning(
+                f"Search #{run['id']} has shown no result for over {STALE_AFTER_MINUTES} minutes; the backend "
+                "was probably restarted while it ran. You can start a new search."
+            )
+            return False
+        total, done = max(run["companies_searched"], 0), run["companies_done"]
+        st.progress(done / total if total else 0.0)
+        where = f" Now: **{run['current_company']}**." if run["current_company"] else ""
+        st.markdown(
+            f"🟢 **Search #{run['id']} is running** ({run['trigger']}, {_elapsed(run['started_at'])}). "
+            f"{done} of {total or '…'} companies done.{where} "
+            f"{run['jobs_fetched']} jobs fetched, {run['qualified_jobs']} matched your keywords so far."
+        )
+        return True
+    icon = {"success": "✅", "partial": "⚠️"}.get(run["status"], "❌")
+    st.markdown(
+        f"{icon} **Last search #{run['id']}: {run['status']}** ({run['trigger']}, finished {fmt_dt(run['finished_at'])}). "
+        f"{run['companies_done']} of {run['companies_searched']} companies, {run['jobs_fetched']} jobs fetched, "
+        f"**{run['qualified_jobs']} matched your keywords**, {run['new_jobs']} new."
+    )
+    if run["errors"]:
+        with st.expander(
+            f"{len(run['errors'])} note(s) from this search", expanded=run["status"] == "failed"
+        ):
+            for err in run["errors"]:
+                st.caption(f"⚠️ {err}")
+    return False
+
+
+def _activity_panel() -> None:
+    """Shows whether a search is running. Refreshes itself every 2 s while one is."""
     api = client()
-    started = guard(api.post, "/search", json={"company_ids": company_ids})
-    if not started:
-        return
-    box = st.empty()
-    for _ in range(600):  # up to ~10 minutes
-        status = guard(api.get, f"/search/{started['id']}")
-        if status is None:
-            return
-        if status["finished_at"]:
-            break
-        box.info(f"Searching… {status['companies_searched']} companies, {status['jobs_fetched']} jobs so far")
-        time.sleep(1)
-    box.empty()
-    # Keep the outcome across the rerun below, which refreshes the metrics and tables.
-    st.session_state["last_search"] = {
-        "status": status["status"],
-        "text": f"{status['jobs_fetched']} jobs fetched, {status['qualified_jobs']} matched your keywords, "
-        f"{status['new_jobs']} new.",
-        "errors": status["errors"],
-    }
-    st.rerun()
+    latest = (guard(api.get, "/search/history", limit=1) or [None])[0]
+    if latest is not None and latest["finished_at"] is None and not _is_stale(latest):
 
+        @st.fragment(run_every=2)
+        def live() -> None:
+            run = (guard(api.get, "/search/history", limit=1) or [None])[0]
+            if not _render_run(run):
+                st.rerun()  # finished: redraw the whole page so the numbers below update
 
-def _show_last_search() -> None:
-    result = st.session_state.pop("last_search", None)
-    if not result:
-        return
-    show = {"success": st.success, "partial": st.warning}.get(result["status"], st.error)
-    show(("Search finished: " if result["status"] != "failed" else "Search failed. ") + result["text"])
-    for err in result["errors"]:
-        st.caption(f"⚠️ {err}")
+        live()
+    else:
+        _render_run(latest)
 
 
 def page_dashboard() -> None:
     api = client()
     st.title("📡 JobRadar AI")
-    _show_last_search()
+    st.subheader("Search activity")
+    _activity_panel()
     stats = guard(api.get, "/jobs/stats")
     if stats is None:
         return
@@ -69,15 +117,15 @@ def page_dashboard() -> None:
     enabled = [co for co in companies if co["enabled"]]
     if not enabled:
         st.info(
-            "Add target companies under **Settings → Companies**, and keywords under **Settings → Keywords**."
+            "Add company names under **Settings → Companies**, and keywords under **Settings → Keywords**."
         )
     left, right = st.columns([1, 2])
     if left.button("🔍 Search all enabled companies", type="primary", disabled=not enabled):
-        _run_search_panel(None)
+        _start_search(None)
     names = {co["name"]: co["id"] for co in enabled}
     picked = right.multiselect("…or search selected companies only", list(names))
     if picked and right.button("Search selected"):
-        _run_search_panel([names[n] for n in picked])
+        _start_search([names[n] for n in picked])
 
     if companies:
         st.subheader("Target companies")
@@ -85,7 +133,12 @@ def page_dashboard() -> None:
             [
                 {
                     "Company": co["name"],
-                    "Platform": co["platform"],
+                    "Job board": (
+                        f"{co['platform']} ({co['discovery_status']})"
+                        if co["platform"]
+                        else co["discovery_status"]
+                    ),
+                    "Careers page": co["careers_url"],
                     "Enabled": co["enabled"],
                     "Jobs collected": co["jobs_collected"],
                     "Last success": fmt_dt(co["last_success_at"]),
@@ -93,27 +146,30 @@ def page_dashboard() -> None:
                 }
                 for co in companies
             ],
+            column_config={"Careers page": st.column_config.LinkColumn("Careers page", display_text="open")},
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
-    history = guard(api.get, "/search/history", limit=5) or []
+    history = guard(api.get, "/search/history", limit=10) or []
     if history:
-        with st.expander("Recent searches"):
+        with st.expander("Search history"):
             st.dataframe(
                 [
                     {
+                        "#": h["id"],
                         "Started": fmt_dt(h["started_at"]),
                         "Trigger": h["trigger"],
-                        "Status": h["status"],
+                        "Status": h["status"] if h["finished_at"] else "running",
+                        "Companies": f"{h['companies_done']}/{h['companies_searched']}",
                         "Fetched": h["jobs_fetched"],
                         "Qualified": h["qualified_jobs"],
                         "New": h["new_jobs"],
-                        "Issues": len(h["errors"]),
+                        "Notes": len(h["errors"]),
                     }
                     for h in history
                 ],
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
             )
 
 

@@ -19,7 +19,7 @@ Resources are nouns in URLs; HTTP methods are the verbs; status codes report the
 
 | Area | Endpoints |
 |---|---|
-| Companies | `GET/POST /companies`, `PATCH/DELETE /companies/{id}`, `POST /companies/{id}/test`, `GET /companies/export?format=json\|csv`, `POST /companies/import?format=` |
+| Companies | `GET/POST /companies` (a name alone is enough), `POST /companies/bulk` (list of names), `PATCH/DELETE /companies/{id}`, `POST /companies/{id}/discover` (look for the job board again), `POST /companies/{id}/test`, `GET /companies/export?format=json\|csv`, `POST /companies/import?format=` |
 | Keywords | `GET/POST /keywords`, `PATCH/DELETE /keywords/{id}`, `POST /keywords/test` |
 | Preferences | `GET/PUT /preferences` |
 | Resume | `POST /resume` (multipart), `GET /resume`, `GET /resume/active`, `POST /resume/{id}/activate`, `PATCH /resume/{id}`, `POST /resume/{id}/skills`, `DELETE /resume/{id}/skills/{name}`, `DELETE /resume/{id}` |

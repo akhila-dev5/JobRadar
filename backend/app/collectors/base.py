@@ -137,6 +137,9 @@ class HttpFetcher:
         self._min_interval = min_interval
         self._last_call: dict[str, float] = {}
         self._sleep = sleep
+        # Probe bookkeeping: lets discovery tell "does not exist" (404) from "could not ask".
+        self.probe_answers = 0  # clear answers: 200, or 404 = no such board
+        self.probe_failures = 0  # network errors, timeouts, 403/429/5xx...
 
     def _throttle(self, host: str) -> None:
         wait = self._last_call.get(host, 0.0) + self._min_interval - time.monotonic()
@@ -173,6 +176,32 @@ class HttpFetcher:
             if attempt < self._max_retries:
                 self._sleep(min(2**attempt, 10))
         raise CollectorError(f"Giving up on {url}: {last_exc}")
+
+    def probe(self, url: str, params: dict[str, Any] | None = None) -> Any | None:
+        """One polite attempt, no retries and no exceptions.
+
+        Used to guess whether a careers board exists. Returns the parsed JSON on HTTP 200,
+        otherwise None. Every call is counted as a clear answer (200 / 404) or a failure
+        (timeouts, blocked, rate limited, server errors), so a caller can tell "this board does
+        not exist" apart from "I could not reach the server".
+        """
+        self._throttle(httpx.URL(url).host)
+        try:
+            resp = self._client.get(url, params=params)
+        except httpx.HTTPError:
+            self.probe_failures += 1
+            return None
+        if resp.status_code not in (200, 404):
+            self.probe_failures += 1
+            return None
+        self.probe_answers += 1
+        if resp.status_code == 404:
+            return None
+        try:
+            return resp.json()
+        except ValueError:
+            self.probe_failures += 1
+            return None
 
     def close(self) -> None:
         self._client.close()

@@ -67,13 +67,15 @@ connects directly as the table owner.
 
 ## 6. Run
 
-Two terminals, both with the venv active:
+Two terminals. **Each new terminal starts without the virtual environment, so run `source .venv/bin/activate` in both** (your prompt should start with `(.venv)`; otherwise you get `uvicorn: command not found`):
 
 ```bash
 # terminal 1: backend  (API docs at http://127.0.0.1:8000/docs)
+cd ~/projects/JobRadar && source .venv/bin/activate
 uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 
 # terminal 2: dashboard  (http://localhost:8501)
+cd ~/projects/JobRadar && source .venv/bin/activate
 streamlit run frontend/dashboard.py
 ```
 
@@ -84,16 +86,30 @@ WSL2 forwards localhost, so open `http://localhost:8501` in your Windows browser
 1. **Settings > Resume**: upload your PDF or DOCX; fix skills.
 2. **Settings > Keywords**: add keywords, or run `python scripts/seed_keywords.py` to load
    `examples/keywords.example.json`.
-3. **Settings > Companies**: add companies. The board token is the last part of the careers URL:
+3. **Settings > Companies**: type company **names only**, one per line, and press
+   **Add and find job boards**. The app looks for each company's job board on Greenhouse, Lever and
+   Ashby (doc 06). Within a few seconds each company shows:
+   - ✅ **Job board found** (verified as the right company)
+   - 🟡 **Job board found: please confirm it is the right company**: open the careers link; if it is the wrong company, delete it
+   - ❌ **No public job board found**: the company probably runs its own careers site; if you have its
+     Greenhouse/Lever/Ashby link, paste it under *Edit / paste a careers link*
+   - 📡 **Could not reach the job-board servers**: check your internet; it retries at the next search
+4. **Dashboard > Search all enabled companies** (or pick specific ones). Job Results shows the matching
+   postings with a direct link to each original posting.
 
-   | Platform | Careers URL looks like | Token |
-   |---|---|---|
-   | Greenhouse | `boards.greenhouse.io/<token>` or `job-boards.greenhouse.io/<token>` | `<token>` |
-   | Lever | `jobs.lever.co/<token>` (EU: `jobs.eu.lever.co/<token>`, set region to EU) | `<token>` |
-   | Ashby | `jobs.ashbyhq.com/<token>` | `<token>` |
+## How to check that a search has started
 
-   Press **Test** to confirm the token works before searching.
-4. **Dashboard > Search all enabled companies** (or pick specific ones).
+- **Dashboard > Search activity** (top of the page): a green line "Search #N is running ... X of Y companies
+  done. Now: <company>" with a progress bar that updates every 2 seconds. When it finishes it turns into a
+  summary (✅ success, ⚠️ partial, ❌ failed) with expandable notes.
+- **Dashboard > Search history**: the last 10 runs, including scheduled and command-line ones.
+- **Backend terminal**: lines such as `Search 3 started: 12 companies`, `Search 3: fetching Stripe (greenhouse/stripe)`,
+  `Search 3 finished: success (...)`.
+- **API**: `http://127.0.0.1:8000/search/history?limit=1` (or `/docs`).
+
+A search only runs when you press the button, or on a schedule if you enabled it (`SCHEDULER_ENABLED=true`
+in `.env` while the backend runs), or when you run `python scripts/run_search.py`. Adding companies on its own
+only looks up their job boards; it does not search for jobs.
 
 ## 8. Optional
 

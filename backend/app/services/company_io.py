@@ -54,29 +54,38 @@ def import_companies(db: Session, content: str, fmt: str) -> dict:
         else:
             data = list(csv.DictReader(io.StringIO(content)))
     except (ValueError, csv.Error) as exc:
-        return {"created": 0, "updated": 0, "errors": [f"Could not read file: {exc}"]}
+        return {"created": 0, "updated": 0, "errors": [f"Could not read file: {exc}"], "new_pending": []}
 
     repo = CompanyRepository(db)
     created = updated = 0
+    new_pending: list[int] = []  # name-only rows: the caller starts board discovery for these
     for index, raw in enumerate(data, start=1):
         try:
             if not isinstance(raw, dict):
                 raise ValueError("row is not an object")
+            # Only "name" is required; empty platform/board_token cells mean "find it for me".
             payload = CompanyIn(
                 name=str(raw.get("name", "")),
-                platform=str(raw.get("platform", "")).strip().lower(),
-                board_token=str(raw.get("board_token", "")).strip(),
+                platform=(str(raw.get("platform") or "").strip().lower() or None),
+                board_token=(str(raw.get("board_token") or "").strip() or None),
                 api_region=str(raw.get("api_region") or "us").strip().lower(),
+                careers_url=(str(raw.get("careers_url") or "").strip() or None),
                 enabled=_parse_bool(raw.get("enabled", True)),
             )
+            fields = payload.model_dump(exclude={"careers_url"})
             existing = repo.find_by_name(payload.name)
             if existing:
-                repo.update(existing.id, **payload.model_dump())
+                if payload.platform is None:  # never wipe a known board with an empty cell
+                    for key in ("platform", "board_token", "api_region"):
+                        fields.pop(key)
+                repo.update(existing.id, **fields)
                 updated += 1
             else:
-                repo.create(**payload.model_dump())
+                company = repo.create(**fields)
                 created += 1
+                if company.discovery_status == "pending":
+                    new_pending.append(company.id)
         except (ValidationError, ValueError) as exc:
             msg = exc.errors()[0]["msg"] if isinstance(exc, ValidationError) else str(exc)
             errors.append(f"Row {index}: {msg}")
-    return {"created": created, "updated": updated, "errors": errors}
+    return {"created": created, "updated": updated, "errors": errors, "new_pending": new_pending}
